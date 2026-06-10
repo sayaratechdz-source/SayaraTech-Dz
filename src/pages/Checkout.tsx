@@ -11,9 +11,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { selectCartItems, selectCartTotal, clearCart } from '../Redux/cart';
 import { WILAYAS_COMMUNES } from '../data/wilayas_communes';
-import { createPurchase } from '../firebase/purchases';
-
-const API_URL = 'firebase'; // kept for reference only
+import { createPurchase } from '../api/strapi';
 
 export default function Checkout() {
   const dispatch = useDispatch();

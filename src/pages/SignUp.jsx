@@ -15,8 +15,7 @@ import StorefrontIcon from "@mui/icons-material/Storefront";
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { motion } from "framer-motion";
-import { register } from "../firebase/auth";
-import { createUserProfile } from "../firebase/user";
+import { strapiRegister } from "../api/strapi";
 
 const inputSx = {
   "& .MuiOutlinedInput-root": {
@@ -80,29 +79,20 @@ export default function SignUp() {
     }
     setLoading(true);
     try {
-      const result = await register(form.email, form.password);
-      const uid = result.user.uid;
       const username = (form.firstName + " " + form.lastName).trim();
-
-      await createUserProfile(uid, {
-        uid,
-        email: form.email,
-        username,
-        role: isVendeur ? "vendeur" : "acheteur",
-        vendeurStatus: isVendeur ? "approved" : "none",
-      });
+      const { jwt, user } = await strapiRegister(username, form.email, form.password);
 
       const userData = {
-        uid,
-        email: form.email,
-        username,
+        id: user.id,
+        email: user.email,
+        username: user.username,
         role: isVendeur ? "vendeur" : "acheteur",
-        vendeurStatus: isVendeur ? "approved" : "none",
       };
+      localStorage.setItem("token", jwt);
       localStorage.setItem("user", JSON.stringify(userData));
       navigate(isVendeur ? "/vendeur" : "/");
     } catch (err) {
-      const msg = err.code === "auth/email-already-in-use"
+      const msg = err.message?.includes("already taken")
         ? "Cet email est déjà utilisé."
         : "Erreur de connexion au serveur.";
       setError(msg);

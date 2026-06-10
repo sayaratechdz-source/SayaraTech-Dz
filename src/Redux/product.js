@@ -1,89 +1,42 @@
-import { createApi, fakeBaseQuery } from "@reduxjs/toolkit/query/react";
-import { getProducts, getProduct } from "../firebase/products";
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-// RTK Query مع Firestore بدل REST API
+const STRAPI_URL = import.meta.env.VITE_STRAPI_URL || "https://backend-stdz-production.up.railway.app";
+const STRAPI_TOKEN = import.meta.env.VITE_STRAPI_TOKEN || "";
+
 export const productApi = createApi({
   reducerPath: "productApi",
-  baseQuery: fakeBaseQuery(),
+  baseQuery: fetchBaseQuery({
+    baseUrl: `${STRAPI_URL}/api/`,
+    prepareHeaders: (headers) => {
+      if (STRAPI_TOKEN) {
+        headers.set("Authorization", `Bearer ${STRAPI_TOKEN}`);
+      }
+      return headers;
+    },
+  }),
   tagTypes: ["Products"],
   endpoints: (builder) => ({
 
-    // جلب كل المنتجات (مع فلتر اختياري)
+    // جلب كل المنتجات
     getProducts: builder.query({
-      async queryFn(filter = {}) {
-        try {
-          // إذا كان filter نصاً (للتوافق مع الكود القديم) نتجاهله
-          const filters = typeof filter === "string" ? {} : filter;
-          const data = await getProducts(filters);
-          // نحوّل البيانات لنفس شكل Strapi القديم حتى لا نكسر الكود
-          return {
-            data: {
-              data: data.map((p) => ({
-                id: p.id,
-                attributes: {
-                  productTitle: p.productTitle,
-                  productPrice: p.productPrice,
-                  discount: p.discount || 0,
-                  productDescription: p.productDescription,
-                  productRating: p.productRating || 0,
-                  category: p.category,
-                  stock: p.stock || 0,
-                  minStock: p.minStock || 5,
-                  status: p.status || "available",
-                  brand: p.brand || "",
-                  barcode: p.barcode || "",
-                  vendeurId: p.vendeurId || "",
-                  sku: p.sku || "",
-                  createdAt: p.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-                  // صورة واحدة من Firebase Storage
-                  productimg: p.imageUrl
-                    ? { data: [{ attributes: { url: p.imageUrl } }] }
-                    : { data: [] },
-                },
-              })),
-            },
-          };
-        } catch (e) {
-          return { error: e.message };
+      query: (params = "products?populate=*") => {
+        if (typeof params === "string") return params;
+        const { category, search } = params;
+        let qs = "products?populate=*";
+        if (category && category !== "all") {
+          qs += `&filters[category][$eq]=${encodeURIComponent(category)}`;
         }
+        if (search) {
+          qs += `&filters[productTitle][$containsi]=${encodeURIComponent(search)}`;
+        }
+        return qs;
       },
       providesTags: ["Products"],
     }),
 
     // جلب منتج واحد
     getProduct: builder.query({
-      async queryFn(id) {
-        try {
-          const p = await getProduct(id);
-          if (!p) return { error: "Product not found" };
-          return {
-            data: {
-              data: {
-                id: p.id,
-                attributes: {
-                  productTitle: p.productTitle,
-                  productPrice: p.productPrice,
-                  discount: p.discount || 0,
-                  productDescription: p.productDescription,
-                  productRating: p.productRating || 0,
-                  category: p.category,
-                  stock: p.stock || 0,
-                  status: p.status || "available",
-                  brand: p.brand || "",
-                  vendeurId: p.vendeurId || "",
-                  sku: p.sku || "",
-                  createdAt: p.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-                  productimg: p.imageUrl
-                    ? { data: [{ attributes: { url: p.imageUrl } }] }
-                    : { data: [] },
-                },
-              },
-            },
-          };
-        } catch (e) {
-          return { error: e.message };
-        }
-      },
+      query: (id) => `products/${id}?populate=*`,
     }),
 
   }),

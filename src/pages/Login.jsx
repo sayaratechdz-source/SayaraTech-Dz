@@ -15,8 +15,7 @@ import FacebookIcon from "@mui/icons-material/Facebook";
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import { motion } from "framer-motion";
-import { login, loginWithGoogle, loginWithFacebook } from "../firebase/auth";
-import { getUserProfile, createUserProfile } from "../firebase/user";
+import { strapiLogin } from "../api/strapi";
 
 export default function Login() {
   const [email, setEmail]       = useState("");
@@ -35,66 +34,27 @@ export default function Login() {
     if (!email || !password) { setError("Veuillez remplir tous les champs"); return; }
     setLoading(true); setError("");
     try {
-      const result = await login(email, password);
-      const profile = await getUserProfile(result.user.uid);
+      const { jwt, user } = await strapiLogin(email, password);
       const userData = {
-        uid: result.user.uid,
-        email: result.user.email,
-        username: profile?.username || result.user.displayName || email.split("@")[0],
-        role: profile?.role || "acheteur",
-        vendeurStatus: profile?.vendeurStatus || "none",
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role?.name?.toLowerCase() === "vendeur" ? "vendeur" : "acheteur",
       };
+      localStorage.setItem("token", jwt);
       localStorage.setItem("user", JSON.stringify(userData));
       navigate(userData.role === "vendeur" ? "/vendeur" : "/");
     } catch (err) {
-      const msg = err.code === "auth/invalid-credential" || err.code === "auth/wrong-password"
-        ? "Email ou mot de passe incorrect"
-        : "Erreur de connexion, réessayez.";
-      setError(msg);
+      setError("Email ou mot de passe incorrect");
     } finally { setLoading(false); }
   };
 
-  // ── تسجيل دخول بـ Google / Facebook ──────────────────
+  // ── تسجيل دخول بـ Google / Facebook (désactivé avec Strapi) ──────────────────
   const handleSocialClick = (provider) => {
-    setRoleModal({ open: true, provider });
+    setError("La connexion sociale n'est pas disponible pour le moment.");
   };
 
-  const handleRoleSelect = async (role) => {
-    setRoleModal({ open: false, provider: "" });
-    setLoading(true); setError("");
-    try {
-      const result = roleModal.provider === "google"
-        ? await loginWithGoogle()
-        : await loginWithFacebook();
-
-      const uid = result.user.uid;
-      let profile = await getUserProfile(uid);
-
-      // إنشاء الملف إذا كان جديداً
-      if (!profile) {
-        await createUserProfile(uid, {
-          uid,
-          email: result.user.email,
-          username: result.user.displayName || result.user.email?.split("@")[0] || "User",
-          role: role === "vendeur" ? "vendeur" : "acheteur",
-          vendeurStatus: role === "vendeur" ? "approved" : "none",
-        });
-        profile = await getUserProfile(uid);
-      }
-
-      const userData = {
-        uid,
-        email: result.user.email,
-        username: profile?.username || result.user.displayName,
-        role: profile?.role || "acheteur",
-        vendeurStatus: profile?.vendeurStatus || "none",
-      };
-      localStorage.setItem("user", JSON.stringify(userData));
-      navigate(userData.role === "vendeur" ? "/vendeur" : "/");
-    } catch (err) {
-      setError("Erreur de connexion sociale. Réessayez.");
-    } finally { setLoading(false); }
-  };
+  const handleRoleSelect = async () => {};
 
   const inputSx = {
     "& .MuiOutlinedInput-root": {

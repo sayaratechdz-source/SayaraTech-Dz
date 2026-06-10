@@ -22,8 +22,7 @@ import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell } from "recharts";
 import MessagingPanel, { getUnreadCount } from "./Messaging";
 
-import { getProducts, addProduct, updateProduct, deleteProduct } from "../firebase/products";
-import { getAllPurchases } from "../firebase/purchases";
+import { getProducts, addProduct, updateProduct, deleteProduct, getAllPurchases } from "../api/strapi";
 
 const RED = "#E63946";
 const PALETTE = [RED, "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6"];
@@ -74,37 +73,9 @@ export default function VendeurDashboard() {
       getProducts({ vendeurId: userId }),
       getAllPurchases(),
     ]).then(([prods, purch]) => {
-      // نحوّل لشكل Strapi القديم
-      const mappedProds = prods.map(p => ({
-        id: p.id,
-        attributes: {
-          productTitle: p.productTitle,
-          productPrice: p.productPrice,
-          discount: p.discount || 0,
-          stock: p.stock || 0,
-          category: p.category,
-          productDescription: p.productDescription,
-          productRating: p.productRating || 0,
-          vendeurId: p.vendeurId,
-          createdAt: p.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          productimg: p.imageUrl ? { data: [{ attributes: { url: p.imageUrl } }] } : { data: [] },
-        },
-      }));
-      const mappedPurch = purch.map(p => ({
-        id: p.id,
-        attributes: {
-          name: p.name,
-          phone: p.phone,
-          wilaya: p.wilaya,
-          quantity: p.quantity,
-          totalPrice: p.totalPrice,
-          status: p.status,
-          createdAt: p.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          product: { data: p.productId ? { id: p.productId, attributes: { productTitle: p.productTitle } } : null },
-        },
-      }));
-      setProducts(mappedProds);
-      setPurchases(mappedPurch);
+      // بيانات Strapi بالفعل بشكل { id, attributes }
+      setProducts(prods);
+      setPurchases(purch);
     }).catch(() => {}).finally(() => setLoading(false));
   };
 

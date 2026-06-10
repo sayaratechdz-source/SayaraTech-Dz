@@ -16,7 +16,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MessagingPanel, { getUnreadCount } from "./Messaging";
 
-import { getPurchasesByPhone } from "../firebase/purchases";
+import { getPurchasesByPhone } from "../api/strapi";
 
 const statusConfig = {
   pending:   { label: "En attente",  labelAr: "قيد الانتظار", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", icon: <HourglassEmptyIcon sx={{ fontSize: 14 }} /> },
@@ -42,23 +42,8 @@ export default function MyOrders() {
     if (!phone) { setLoading(false); return; }
     getPurchasesByPhone(phone)
       .then(data => {
-        // نحوّل البيانات لنفس شكل Strapi القديم
-        const mapped = data.map(p => ({
-          id: p.id,
-          attributes: {
-            name: p.name,
-            phone: p.phone,
-            wilaya: p.wilaya,
-            commune: p.commune,
-            quantity: p.quantity,
-            totalPrice: p.totalPrice,
-            unitPrice: p.unitPrice,
-            status: p.status,
-            createdAt: p.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-            product: { data: p.productId ? { id: p.productId, attributes: { productTitle: p.productTitle } } : null },
-          },
-        }));
-        setOrders(mapped);
+        // بيانات Strapi بالفعل بشكل { id, attributes }
+        setOrders(data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
