@@ -1,0 +1,32 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Fond rouge arrondi -->
+  <rect width="64" height="64" rx="14" fill="#E63946"/>
+
+  <!-- Carrosserie voiture -->
+  <rect x="7" y="30" width="50" height="18" rx="5" fill="white"/>
+
+  <!-- Toit -->
+  <path d="M17 30 Q20 16 44 16 Q48 16 50 30 Z" fill="white"/>
+
+  <!-- Vitre -->
+  <path d="M21 29 Q23 19 41 19 Q44 19 46 29 Z" fill="#E63946" opacity="0.7"/>
+
+  <!-- Ligne séparation vitre -->
+  <line x1="33" y1="19" x2="33" y2="29" stroke="#E63946" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Roue gauche -->
+  <circle cx="18" cy="48" r="8" fill="#1a1a1a"/>
+  <circle cx="18" cy="48" r="4" fill="#ccc"/>
+  <circle cx="18" cy="48" r="2" fill="#1a1a1a"/>
+
+  <!-- Roue droite -->
+  <circle cx="46" cy="48" r="8" fill="#1a1a1a"/>
+  <circle cx="46" cy="48" r="4" fill="#ccc"/>
+  <circle cx="46" cy="48" r="2" fill="#1a1a1a"/>
+
+  <!-- Phare avant -->
+  <rect x="54" y="33" width="5" height="4" rx="2" fill="#FFD700" opacity="0.9"/>
+
+  <!-- Phare arrière -->
+  <rect x="5" y="33" width="4" height="4" rx="2" fill="#ff6b6b" opacity="0.9"/>
+</svg>
