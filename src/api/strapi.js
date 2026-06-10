@@ -4,7 +4,7 @@ const TOKEN = import.meta.env.VITE_STRAPI_TOKEN || "";
 
 const headers = () => ({
   "Content-Type": "application/json",
-  ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
+  // لا نرسل توكن للقراءة العامة
 });
 
 const authHeaders = () => {

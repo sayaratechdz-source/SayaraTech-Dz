@@ -1,18 +1,12 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 const STRAPI_URL = import.meta.env.VITE_STRAPI_URL || "https://backend-stdz-production.up.railway.app";
-const STRAPI_TOKEN = import.meta.env.VITE_STRAPI_TOKEN || "";
 
 export const productApi = createApi({
   reducerPath: "productApi",
   baseQuery: fetchBaseQuery({
     baseUrl: `${STRAPI_URL}/api/`,
-    prepareHeaders: (headers) => {
-      if (STRAPI_TOKEN) {
-        headers.set("Authorization", `Bearer ${STRAPI_TOKEN}`);
-      }
-      return headers;
-    },
+    // لا توكن للقراءة العامة — Strapi Public role مفعّل
   }),
   tagTypes: ["Products"],
   endpoints: (builder) => ({
