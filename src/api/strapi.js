@@ -39,11 +39,31 @@ export const strapiLogin = async (email, password) => {
 };
 
 export const strapiRegister = async (username, email, password, vendeurStatus = "acheteur") => {
+  // الخطوة 1: تسجيل المستخدم
   const data = await req("/api/auth/local/register", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ username, email, password, vendeurStatus }),
+    body: JSON.stringify({ username, email, password }),
   });
+
+  // الخطوة 2: تحديث vendeurStatus باستخدام JWT المُستلم
+  if (data.jwt && data.user?.id) {
+    try {
+      await req(`/api/users/${data.user.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.jwt}`,
+        },
+        body: JSON.stringify({ vendeurStatus }),
+      });
+      // نحدث data.user محلياً
+      data.user.vendeurStatus = vendeurStatus;
+    } catch (e) {
+      console.warn("vendeurStatus update failed:", e.message);
+    }
+  }
+
   return data;
 };
 

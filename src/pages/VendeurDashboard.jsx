@@ -50,7 +50,9 @@ export default function VendeurDashboard() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const token = localStorage.getItem("token");
-  const userId = user.email || String(user.id || "vendeur");
+  // نستخدم user.id الرقمي كـ vendeurId للتوافق مع Strapi
+  const userId = String(user.id || "");
+  const userEmail = user.email || "";
   const userName = user.username || user.email || "Vendeur";
 
   const [tab, setTab] = useState(0);
@@ -81,9 +83,9 @@ export default function VendeurDashboard() {
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => {
-    const t = setInterval(() => setUnread(getUnreadCount(userId)), 2000);
+    const t = setInterval(() => setUnread(getUnreadCount(userEmail)), 2000);
     return () => clearInterval(t);
-  }, [userId]);
+  }, [userEmail]);
 
   const openAdd = () => { setEditId(null); setForm(EMPTY_FORM); setDialog(true); };
   const openEdit = p => {
@@ -105,7 +107,7 @@ export default function VendeurDashboard() {
         discount: Math.abs(Number(form.discount) || 0),
         productDescription: form.productDescription || ".",
         productRating: 0,
-        vendeurId: userId,
+        vendeurId: userId,   // user.id الرقمي
       };
       if (editId) {
         await updateProduct(editId, productData, form.image || null);
@@ -309,7 +311,7 @@ export default function VendeurDashboard() {
         {tab === 2 && (
           <Box>
             <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: 16, mb: 3 }}>Messages avec les acheteurs</Typography>
-            <MessagingPanel currentUser={userId} currentUserName={userName} />
+            <MessagingPanel currentUser={userEmail} currentUserName={userName} />
           </Box>
         )}
 
