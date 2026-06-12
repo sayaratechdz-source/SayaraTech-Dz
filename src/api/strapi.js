@@ -38,17 +38,17 @@ export const strapiLogin = async (email, password) => {
   return data;
 };
 
-export const strapiRegister = async (username, email, password) => {
+export const strapiRegister = async (username, email, password, vendeurStatus = "acheteur") => {
   const data = await req("/api/auth/local/register", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, vendeurStatus }),
   });
   return data;
 };
 
 export const strapiGetMe = async (jwt) => {
-  return req("/api/users/me?populate=*", {
+  return req("/api/users/me?populate=role", {
     headers: { Authorization: `Bearer ${jwt}` },
   });
 };

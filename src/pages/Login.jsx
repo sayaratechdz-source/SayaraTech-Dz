@@ -15,7 +15,7 @@ import FacebookIcon from "@mui/icons-material/Facebook";
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import { motion } from "framer-motion";
-import { strapiLogin } from "../api/strapi";
+import { strapiLogin, strapiGetMe } from "../api/strapi";
 
 export default function Login() {
   const [email, setEmail]       = useState("");
@@ -35,11 +35,15 @@ export default function Login() {
     setLoading(true); setError("");
     try {
       const { jwt, user } = await strapiLogin(email, password);
+      // نجلب بيانات المستخدم الكاملة من /users/me لنحصل على vendeurStatus
+      const me = await strapiGetMe(jwt);
+      const vendeurStatus = me.vendeurStatus || user.vendeurStatus || "acheteur";
       const userData = {
         id: user.id,
         email: user.email,
         username: user.username,
-        role: user.role?.name?.toLowerCase() === "vendeur" ? "vendeur" : "acheteur",
+        role: vendeurStatus === "vendeur" ? "vendeur" : "acheteur",
+        vendeurStatus,
       };
       localStorage.setItem("token", jwt);
       localStorage.setItem("user", JSON.stringify(userData));
