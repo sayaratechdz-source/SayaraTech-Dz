@@ -67,7 +67,11 @@ export default function VendeurDashboard() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [unread, setUnread] = useState(0);
 
-  const headers = { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) };
+  useEffect(() => {
+    if (!token || user.role !== "vendeur") {
+      navigate("/login");
+    }
+  }, [navigate, token, user.role]);
 
   const fetchData = () => {
     setLoading(true);
@@ -77,11 +81,14 @@ export default function VendeurDashboard() {
     ]).then(([prods, purch]) => {
       // بيانات Strapi بالفعل بشكل { id, attributes }
       setProducts(prods);
-      setPurchases(purch);
+      const vendorPurchases = purch.filter(order =>
+        String(order.attributes?.product?.data?.attributes?.vendeurId) === userId
+      );
+      setPurchases(vendorPurchases);
     }).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [userId]);
   useEffect(() => {
     const t = setInterval(() => setUnread(getUnreadCount(userEmail)), 2000);
     return () => clearInterval(t);

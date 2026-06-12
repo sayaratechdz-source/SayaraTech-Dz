@@ -39,29 +39,32 @@ export const strapiLogin = async (email, password) => {
 };
 
 export const strapiRegister = async (username, email, password, vendeurStatus = "acheteur") => {
-  // الخطوة 1: تسجيل المستخدم
+  const payload = { username, email, password, vendeurStatus };
+
+  // تسجيل المستخدم مع حالة البائع مباشرةً إذا كانت الخاصية موجودة في نموذج المستخدم
   const data = await req("/api/auth/local/register", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify(payload),
   });
 
-  // الخطوة 2: تحديث vendeurStatus باستخدام JWT المُستلم
+  // إذا لم تُحفظ الخاصية مباشرة، نحاول تحديثها باستخدام JWT المُستلم
   if (data.jwt && data.user?.id) {
-    try {
-      await req(`/api/users/${data.user.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.jwt}`,
-        },
-        body: JSON.stringify({ vendeurStatus }),
-      });
-      // نحدث data.user محلياً
-      data.user.vendeurStatus = vendeurStatus;
-    } catch (e) {
-      console.warn("vendeurStatus update failed:", e.message);
+    if (!data.user.vendeurStatus || data.user.vendeurStatus !== vendeurStatus) {
+      try {
+        await req(`/api/users/${data.user.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.jwt}`,
+          },
+          body: JSON.stringify({ vendeurStatus }),
+        });
+      } catch (e) {
+        console.warn("vendeurStatus update failed:", e.message);
+      }
     }
+    data.user.vendeurStatus = vendeurStatus;
   }
 
   return data;

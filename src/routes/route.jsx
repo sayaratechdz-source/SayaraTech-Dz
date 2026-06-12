@@ -18,14 +18,16 @@ import AuthCallback from "../pages/AuthCallback";
 import About from "../pages/About";
 
 function ProtectedRoute({ children }) {
-  // Protection désactivée en mode démo — réactiver en production
+  const token = localStorage.getItem("token");
+  const user  = JSON.parse(localStorage.getItem("user") || "{}");
+  if (!token || !user?.id) return <Navigate to="/login" replace />;
   return children;
 }
 
 function VendeurRoute({ children }) {
   const token = localStorage.getItem("token");
   const user  = JSON.parse(localStorage.getItem("user") || "{}");
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token || !user?.id) return <Navigate to="/login" replace />;
   if (user.role !== "vendeur") return <Navigate to="/" replace />;
   return children;
 }
