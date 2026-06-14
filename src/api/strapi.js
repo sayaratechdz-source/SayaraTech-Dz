@@ -1,14 +1,16 @@
 // ── Strapi API client ────────────────────────────────────────────────────────
 const BASE = import.meta.env.VITE_STRAPI_URL || "https://backend-stdz-production.up.railway.app";
-const TOKEN = import.meta.env.VITE_STRAPI_TOKEN || "";
 
-const headers = () => ({
-  "Content-Type": "application/json",
-  // لا نرسل توكن للقراءة العامة
-});
+// IDs الـ roles في Strapi
+export const ROLES = {
+  ACHETEUR: 4,
+  VENDEUR: 5,
+};
+
+const jsonHeaders = () => ({ "Content-Type": "application/json" });
 
 const authHeaders = () => {
-  const token = localStorage.getItem("token") || TOKEN;
+  const token = localStorage.getItem("token");
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -29,58 +31,74 @@ async function req(path, options = {}) {
 // ════════════════════════════════════════════════════════════════
 
 export const strapiLogin = async (email, password) => {
+  // الخطوة 1: تسجيل الدخول والحصول على JWT
   const data = await req("/api/auth/local", {
     method: "POST",
-    headers: headers(),
+    headers: jsonHeaders(),
     body: JSON.stringify({ identifier: email, password }),
   });
-  // data = { jwt, user }
-  return data;
-};
 
-export const strapiRegister = async (username, email, password, vendeurStatus = "acheteur") => {
-  const payload = { username, email, password, vendeurStatus };
-
-  // تسجيل المستخدم مع حالة البائع مباشرةً إذا كانت الخاصية موجودة في نموذج المستخدم
-  const data = await req("/api/auth/local/register", {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify(payload),
+  // الخطوة 2: جلب بيانات المستخدم الكاملة مع الـ role
+  const me = await req("/api/users/me?populate=role", {
+    headers: { Authorization: `Bearer ${data.jwt}` },
   });
 
-  // إذا لم تُحفظ الخاصية مباشرة، نحاول تحديثها باستخدام JWT المُستلم
+  // تحديد الدور بناءً على role.id من Strapi
+  const roleId = me.role?.id;
+  const role = roleId === ROLES.VENDEUR ? "vendeur" : "acheteur";
+
+  return {
+    jwt: data.jwt,
+    user: {
+      id: me.id,
+      email: me.email,
+      username: me.username,
+      role,
+      roleId,
+    },
+  };
+};
+
+export const strapiRegister = async (username, email, password, isVendeur = false) => {
+  // الخطوة 1: تسجيل الحساب (Strapi يعطي Authenticated افتراضياً)
+  const data = await req("/api/auth/local/register", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ username, email, password }),
+  });
+
+  // الخطوة 2: تعيين الـ role الصحيح (Acheteur أو Vendeur)
+  const targetRoleId = isVendeur ? ROLES.VENDEUR : ROLES.ACHETEUR;
   if (data.jwt && data.user?.id) {
-    if (!data.user.vendeurStatus || data.user.vendeurStatus !== vendeurStatus) {
-      try {
-        await req(`/api/users/${data.user.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${data.jwt}`,
-          },
-          body: JSON.stringify({ vendeurStatus }),
-        });
-      } catch (e) {
-        console.warn("vendeurStatus update failed:", e.message);
-      }
+    try {
+      await req(`/api/users/${data.user.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.jwt}`,
+        },
+        body: JSON.stringify({ role: targetRoleId }),
+      });
+    } catch (e) {
+      console.warn("Role assignment failed:", e.message);
     }
-    data.user.vendeurStatus = vendeurStatus;
   }
 
-  return data;
+  return {
+    jwt: data.jwt,
+    user: {
+      id: data.user.id,
+      email: data.user.email,
+      username: data.user.username,
+      role: isVendeur ? "vendeur" : "acheteur",
+      roleId: targetRoleId,
+    },
+  };
 };
 
 export const strapiGetMe = async (jwt) => {
   return req("/api/users/me?populate=role", {
     headers: { Authorization: `Bearer ${jwt}` },
-  });
-};
-
-export const strapiUpdateUser = async (id, data) => {
-  return req(`/api/users/${id}`, {
-    method: "PUT",
-    headers: authHeaders(),
-    body: JSON.stringify(data),
   });
 };
 
@@ -99,54 +117,39 @@ export const getProducts = async (filters = {}) => {
   if (filters.search) {
     qs += `&filters[productTitle][$containsi]=${encodeURIComponent(filters.search)}`;
   }
-  const res = await req(qs, { headers: headers() });
+  const res = await req(qs, { headers: jsonHeaders() });
   return res.data || [];
 };
 
 export const getProduct = async (id) => {
-  const res = await req(`/api/products/${id}?populate=*`, { headers: headers() });
+  const res = await req(`/api/products/${id}?populate=*`, { headers: jsonHeaders() });
   return res.data || null;
 };
 
 export const addProduct = async (productData, imageFile = null) => {
   let imageId = null;
-
-  if (imageFile) {
-    imageId = await uploadFile(imageFile);
-  }
-
-  const payload = {
-    data: {
-      ...productData,
-      ...(imageId ? { productimg: imageId } : {}),
-    },
-  };
+  if (imageFile) imageId = await uploadFile(imageFile);
 
   const res = await req("/api/products", {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      data: { ...productData, ...(imageId ? { productimg: imageId } : {}) },
+    }),
   });
   return res.data?.id;
 };
 
 export const updateProduct = async (id, productData, imageFile = null) => {
   let imageId = null;
-  if (imageFile) {
-    imageId = await uploadFile(imageFile);
-  }
-
-  const payload = {
-    data: {
-      ...productData,
-      ...(imageId ? { productimg: imageId } : {}),
-    },
-  };
+  if (imageFile) imageId = await uploadFile(imageFile);
 
   return req(`/api/products/${id}`, {
     method: "PUT",
     headers: authHeaders(),
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      data: { ...productData, ...(imageId ? { productimg: imageId } : {}) },
+    }),
   });
 };
 
@@ -180,7 +183,7 @@ export const getAllPurchases = async () => {
 export const getPurchasesByPhone = async (phone) => {
   const res = await req(
     `/api/purchases?populate=*&filters[phone][$eq]=${encodeURIComponent(phone)}&sort=createdAt:desc`,
-    { headers: headers() }
+    { headers: jsonHeaders() }
   );
   return res.data || [];
 };
@@ -200,14 +203,12 @@ export const updatePurchaseStatus = async (id, status) => {
 export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append("files", file);
-
-  const token = localStorage.getItem("token") || TOKEN;
+  const token = localStorage.getItem("token");
   const res = await fetch(`${BASE}/api/upload`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
   });
-
   if (!res.ok) throw new Error("Upload failed");
   const data = await res.json();
   return data[0]?.id;

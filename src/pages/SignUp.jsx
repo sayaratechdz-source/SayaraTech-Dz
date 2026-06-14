@@ -80,19 +80,11 @@ export default function SignUp() {
     setLoading(true);
     try {
       const username = (form.firstName + " " + form.lastName).trim();
-      const vendeurStatus = isVendeur ? "vendeur" : "acheteur";
-      const { jwt, user } = await strapiRegister(username, form.email, form.password, vendeurStatus);
+      const { jwt, user } = await strapiRegister(username, form.email, form.password, isVendeur);
 
-      const userData = {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        role: user.vendeurStatus === "vendeur" ? "vendeur" : "acheteur",
-        vendeurStatus: user.vendeurStatus || vendeurStatus,
-      };
       localStorage.setItem("token", jwt);
-      localStorage.setItem("user", JSON.stringify(userData));
-      navigate(userData.role === "vendeur" ? "/vendeur" : "/");
+      localStorage.setItem("user", JSON.stringify(user));
+      navigate(user.role === "vendeur" ? "/vendeur" : "/");
     } catch (err) {
       const msg = err.message?.includes("already taken")
         ? "Cet email est déjà utilisé."
