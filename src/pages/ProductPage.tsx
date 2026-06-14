@@ -28,7 +28,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { motion } from "framer-motion";
 import { WILAYAS_COMMUNES } from "../data/wilayas_communes";
 
-import { createPurchase } from "../firebase/purchases";
+import { createPurchase } from "../api/strapi";
 
 const PAYMENT_METHODS = [
   { id: "livraison",  label: "Paiement a la livraison", desc: "Payez en cash a la reception",         icon: <LocalAtmIcon />,       color: "#10b981" },
