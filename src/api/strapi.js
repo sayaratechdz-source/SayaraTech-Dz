@@ -21,6 +21,7 @@ async function req(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    console.error("Strapi error:", JSON.stringify(err, null, 2));
     throw new Error(err?.error?.message || `HTTP ${res.status}`);
   }
   return res.json();

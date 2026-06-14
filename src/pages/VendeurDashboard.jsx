@@ -110,12 +110,14 @@ export default function VendeurDashboard() {
         productTitle: form.productTitle,
         productPrice: Number(form.productPrice),
         stock: Number(form.stock) || 0,
-        category: form.category,
+        category: form.category || "PEUGEOT",
         discount: Math.abs(Number(form.discount) || 0),
         productDescription: form.productDescription || ".",
         productRating: 0,
-        vendeurId: userId,   // user.id الرقمي
+        status: "available",
+        vendeurId: userId,
       };
+      console.log("Sending productData:", productData);
       if (editId) {
         await updateProduct(editId, productData, form.image || null);
       } else {
