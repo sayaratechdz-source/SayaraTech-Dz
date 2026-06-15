@@ -814,14 +814,12 @@
 
     function renderHistory() {
         const list = document.getElementById('historyList');
+        if (!list) return;
         const empty = document.getElementById('historyEmpty');
         if (conversations.length === 0) {
-            empty.style.display = 'block';
-            list.innerHTML = '';
-            list.appendChild(empty);
+            list.innerHTML = '<div class="sidebar-empty" id="historyEmpty">Aucune conversation</div>';
             return;
         }
-        empty.style.display = 'none';
         list.innerHTML = '';
         [...conversations].reverse().forEach(conv => {
             const item = document.createElement('div');
