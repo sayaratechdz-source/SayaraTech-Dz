@@ -1,30 +1,20 @@
 import os
 import re
-import random
+import json
+import base64
 from typing import List, Tuple
-from anthropic import AsyncAnthropic
+import google.generativeai as genai
 from dotenv import load_dotenv
 from database import SessionLocal
 import models
 
 load_dotenv()
-client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 
-tools = [
-    {"name": "diagnostic", "description": "Analyse les symptomes d'une panne automobile.", "input_schema": {"type": "object", "properties": {"symptomes": {"type": "string"}}, "required": ["symptomes"]}},
-    {"name": "identification_pieces", "description": "Identifie une piece pour le vehicule.", "input_schema": {"type": "object", "properties": {"nom_piece": {"type": "string"}, "modele_vehicule": {"type": "string"}}, "required": ["nom_piece"]}},
-    {"name": "prix_stock", "description": "Verifie le prix et le stock d'une piece.", "input_schema": {"type": "object", "properties": {"reference_piece": {"type": "string"}}, "required": ["reference_piece"]}},
-    {"name": "commandes", "description": "Prepare une commande pour des pieces.", "input_schema": {"type": "object", "properties": {"pieces": {"type": "array", "items": {"type": "string"}}}, "required": ["pieces"]}},
-    {"name": "trouver_fournisseur", "description": "Trouve un fournisseur de pieces.", "input_schema": {"type": "object", "properties": {"specialite": {"type": "string"}, "ville": {"type": "string"}}, "required": ["specialite"]}},
-    {"name": "trouver_garage", "description": "Trouve un garage ou mecanicien dans la wilaya.", "input_schema": {"type": "object", "properties": {"type_reparation": {"type": "string"}, "ville": {"type": "string"}}, "required": []}},
-    {"name": "entretien_vehicule", "description": "Programme d'entretien pour un vehicule.", "input_schema": {"type": "object", "properties": {"modele": {"type": "string"}, "kilometrage": {"type": "integer"}}, "required": ["modele"]}},
-    {"name": "main_oeuvre", "description": "Estime le cout de main d oeuvre.", "input_schema": {"type": "object", "properties": {"type_reparation": {"type": "string"}}, "required": ["type_reparation"]}},
-    {"name": "checklist_occasion", "description": "Checklist pour inspecter une voiture d occasion.", "input_schema": {"type": "object", "properties": {"modele": {"type": "string"}}, "required": []}},
-    {"name": "rappel_entretien", "description": "Calcule la prochaine echeance d entretien.", "input_schema": {"type": "object", "properties": {"derniere_vidange_km": {"type": "integer"}, "km_actuel": {"type": "integer"}}, "required": ["km_actuel"]}},
-    {"name": "urgence_panne", "description": "Conseils urgents en cas de panne grave.", "input_schema": {"type": "object", "properties": {"symptome_urgent": {"type": "string"}}, "required": ["symptome_urgent"]}},
-]
+# ── Configuration Gemini ──────────────────────────────────────────────────────
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
+# ── System prompt ─────────────────────────────────────────────────────────────
 system_prompt = (
     "Tu es Abdou (aussi appele Abba), mecanicien expert et ami dans la wilaya de Oum El Bouaghi, Algerie. "
     "Ta zone couvre TOUTE la wilaya: Ain Mlila, Oum El Bouaghi, Ain Beida, Ain Fakroun, et toutes les communes. "
@@ -43,16 +33,16 @@ system_prompt = (
     "INTERDIT ABSOLU: tableaux, markdown, titres avec ##, asterisques **gras**. "
     "Ecris en texte naturel, phrases courtes, ton chaleureux et direct. Emojis avec moderation.\n\n"
     "REGLES OUTILS:\n"
-    "- garage/mecanicien/atelier/depanneur -> trouver_garage immediatement\n"
-    "- ou acheter/fournisseur -> trouver_fournisseur\n"
-    "- panne/symptome/bruit -> diagnostic\n"
-    "- prix/combien/dispo -> prix_stock\n"
-    "- commander -> commandes\n"
-    "- entretien/vidange/kilometrage -> entretien_vehicule\n"
-    "- main d oeuvre/cout pose -> main_oeuvre\n"
-    "- occasion/acheter voiture -> checklist_occasion\n"
-    "- prochaine vidange/rappel -> rappel_entretien\n"
-    "- danger/urgent/fumer/surchauffe -> urgence_panne\n\n"
+    "- garage/mecanicien/atelier/depanneur -> utilise trouver_garage immediatement\n"
+    "- ou acheter/fournisseur -> utilise trouver_fournisseur\n"
+    "- panne/symptome/bruit -> utilise diagnostic\n"
+    "- prix/combien/dispo -> utilise prix_stock\n"
+    "- commander -> utilise commandes\n"
+    "- entretien/vidange/kilometrage -> utilise entretien_vehicule\n"
+    "- main d oeuvre/cout pose -> utilise main_oeuvre\n"
+    "- occasion/acheter voiture -> utilise checklist_occasion\n"
+    "- prochaine vidange/rappel -> utilise rappel_entretien\n"
+    "- danger/urgent/fumer/surchauffe -> utilise urgence_panne\n\n"
     "REGLES ABSOLUES:\n"
     "- Ain Beida, Ain Fakroun, Ain Mlila, Oum El Bouaghi = TOUTES dans ta zone, tu les connais toutes.\n"
     "- Ne dis JAMAIS qu une ville est hors zone ou loin.\n"
@@ -60,14 +50,118 @@ system_prompt = (
     "- Ne commente pas la distance entre les villes."
 )
 
-vision_prompt = (
-    "Tu es Abdou (Abba), mecanicien a Ain Mlila, Algerie. Regarde cette image et reponds comme un vrai ami mecanicien.\n"
-    "STYLE OBLIGATOIRE: texte naturel et humain, ZERO tableaux, ZERO markdown, ZERO asterisques. Phrases directes et simples.\n"
-    "Dis ce que tu vois, ce qui ne va pas, ce qu il faut faire, et le prix approximatif en DZD si applicable.\n"
-    "Sois concret: si c est grave dis-le clairement, si c est simple rassure le client.\n"
-    "Reponds dans la langue du message de l utilisateur (francais, arabe, darija)."
-)
+# ── Gemini tools definition ───────────────────────────────────────────────────
+gemini_tools = [
+    genai.protos.Tool(
+        function_declarations=[
+            genai.protos.FunctionDeclaration(
+                name="diagnostic",
+                description="Analyse les symptomes d une panne automobile.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={"symptomes": genai.protos.Schema(type=genai.protos.Type.STRING)},
+                    required=["symptomes"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="identification_pieces",
+                description="Identifie une piece pour le vehicule.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "nom_piece": genai.protos.Schema(type=genai.protos.Type.STRING),
+                        "modele_vehicule": genai.protos.Schema(type=genai.protos.Type.STRING),
+                    },
+                    required=["nom_piece"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="prix_stock",
+                description="Verifie le prix et le stock d une piece.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={"reference_piece": genai.protos.Schema(type=genai.protos.Type.STRING)},
+                    required=["reference_piece"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="trouver_fournisseur",
+                description="Trouve un fournisseur de pieces.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "specialite": genai.protos.Schema(type=genai.protos.Type.STRING),
+                        "ville": genai.protos.Schema(type=genai.protos.Type.STRING),
+                    },
+                    required=["specialite"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="trouver_garage",
+                description="Trouve un garage ou mecanicien dans la wilaya.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "type_reparation": genai.protos.Schema(type=genai.protos.Type.STRING),
+                        "ville": genai.protos.Schema(type=genai.protos.Type.STRING),
+                    }
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="entretien_vehicule",
+                description="Programme d entretien pour un vehicule.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "modele": genai.protos.Schema(type=genai.protos.Type.STRING),
+                        "kilometrage": genai.protos.Schema(type=genai.protos.Type.INTEGER),
+                    },
+                    required=["modele"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="main_oeuvre",
+                description="Estime le cout de main d oeuvre.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={"type_reparation": genai.protos.Schema(type=genai.protos.Type.STRING)},
+                    required=["type_reparation"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="checklist_occasion",
+                description="Checklist pour inspecter une voiture d occasion.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={"modele": genai.protos.Schema(type=genai.protos.Type.STRING)}
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="rappel_entretien",
+                description="Calcule la prochaine echeance d entretien.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={
+                        "derniere_vidange_km": genai.protos.Schema(type=genai.protos.Type.INTEGER),
+                        "km_actuel": genai.protos.Schema(type=genai.protos.Type.INTEGER),
+                    },
+                    required=["km_actuel"]
+                )
+            ),
+            genai.protos.FunctionDeclaration(
+                name="urgence_panne",
+                description="Conseils urgents en cas de panne grave.",
+                parameters=genai.protos.Schema(
+                    type=genai.protos.Type.OBJECT,
+                    properties={"symptome_urgent": genai.protos.Schema(type=genai.protos.Type.STRING)},
+                    required=["symptome_urgent"]
+                )
+            ),
+        ]
+    )
+]
 
+# ── Keywords ──────────────────────────────────────────────────────────────────
 _SOCIAL_KW = [
     "salam", "bonjour", "bonsoir", "salut", "ahlan", "wach rak", "labas", "la bas",
     "merci", "chokran", "barak allah", "shukran", "thank",
@@ -89,19 +183,18 @@ _VILLES_MAP = {
 
 _GARAGE_KW = [
     "garage", "mecanicien", "mecanicienne", "atelier", "depanneur",
-    "mecano", "rv motor", "revix", "wr auto", "service rapide", "911",
-    "rassim", "nabile", "lamine", "salah", "bilal", "hamza", "farid",
-    "walid", "hassen", "riad", "nassim", "djamel", "samir", "zine", "mehdi",
-    "reparer", "reparation", "mecanique",
+    "mecano", "reparer", "reparation", "mecanique",
 ]
 
+# ── Clean text ────────────────────────────────────────────────────────────────
 def _clean(text: str) -> str:
-    text = re.sub(r"[*][*]([^*]+)[*][*]", r"\\1", text)
-    text = re.sub(r"[*]([^*\n]+)[*]", r"\\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"\*([^*\n]+)\*", r"\1", text)
     text = re.sub(r"#{1,6} ?", "", text)
     text = re.sub(r"`+", "", text)
     return text.strip()
 
+# ── Execute tool ──────────────────────────────────────────────────────────────
 def execute_tool(name: str, inputs: dict) -> str:
     db = SessionLocal()
     try:
@@ -255,20 +348,29 @@ def execute_tool(name: str, inputs: dict) -> str:
     return "Information non disponible."
 
 
+# ── Analyze image with Gemini Vision ─────────────────────────────────────────
 async def analyze_image(image_b64: str, media_type: str, user_message: str) -> str:
     try:
-        content = []
-        if user_message.strip():
-            content.append({"type": "text", "text": user_message})
-        content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}})
-        content.append({"type": "text", "text": vision_prompt})
-        response = await client.messages.create(model=CLAUDE_MODEL, max_tokens=1024, messages=[{"role": "user", "content": content}])
-        return _clean(response.content[0].text)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        image_data = base64.b64decode(image_b64)
+        prompt = (
+            f"{user_message}\n\n"
+            "Tu es Abdou (Abba), mecanicien a Ain Mlila, Algerie. Regarde cette image et reponds comme un vrai ami mecanicien.\n"
+            "STYLE: texte naturel, ZERO markdown, ZERO asterisques. Phrases directes.\n"
+            "Dis ce que tu vois, ce qui ne va pas, ce qu il faut faire, et le prix approximatif en DZD.\n"
+            "Reponds dans la langue du message (francais, arabe, darija)."
+        )
+        response = await model.generate_content_async([
+            {"mime_type": media_type, "data": image_data},
+            prompt
+        ])
+        return _clean(response.text)
     except Exception as e:
-        print(f"Erreur vision: {e}")
-        return "Desole, je n'ai pas pu analyser cette image."
+        print(f"Erreur vision Gemini: {e}")
+        return "Desole, je n ai pas pu analyser cette image."
 
 
+# ── Main process_message ──────────────────────────────────────────────────────
 async def process_message(user_message: str, session_id: str, image_b64=None, media_type=None):
     tools_triggered = []
 
@@ -278,21 +380,28 @@ async def process_message(user_message: str, session_id: str, image_b64=None, me
 
     msg_lower = user_message.lower().strip()
 
-    # ETAPE 1: Detection sociale/emotionnelle
+    # ETAPE 1: Detection sociale
     is_social = any(kw in msg_lower for kw in _SOCIAL_KW)
     tech_kw = ["garage", "piece", "panne", "frein", "moteur", "voiture", "prix", "mecanicien", "vidange", "huile"]
     is_short_nontechnical = len(msg_lower.split()) <= 3 and not any(k in msg_lower for k in tech_kw)
+
+    model = genai.GenerativeModel(
+        model_name=GEMINI_MODEL,
+        system_instruction=system_prompt,
+        tools=gemini_tools
+    )
+
     if is_social or is_short_nontechnical:
         try:
-            response = await client.messages.create(
-                model=CLAUDE_MODEL, max_tokens=512,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}]
+            # Sans outils pour les messages sociaux
+            simple_model = genai.GenerativeModel(
+                model_name=GEMINI_MODEL,
+                system_instruction=system_prompt
             )
-            text = _clean("".join(b.text for b in response.content if b.type == "text"))
-            return text or "Ahlan! Comment je peux t aider?", []
+            response = await simple_model.generate_content_async(user_message)
+            return _clean(response.text), []
         except Exception as e:
-            print("Erreur social:", e)
+            print("Erreur social Gemini:", e)
             return "Ahlan! Comment je peux t aider?", []
 
     # ETAPE 2: Detection ville
@@ -302,7 +411,7 @@ async def process_message(user_message: str, session_id: str, image_b64=None, me
             detected_ville = val
             break
 
-    # ETAPE 3: Forcer l outil garage si mot-cle garage detecte
+    # ETAPE 3: Forcer garage
     force_garage = any(kw in msg_lower for kw in _GARAGE_KW)
     if detected_ville and not force_garage:
         if any(k in msg_lower for k in ["mecani", "reparer", "depann", "trouver"]):
@@ -318,44 +427,60 @@ async def process_message(user_message: str, session_id: str, image_b64=None, me
                 break
         tool_result = execute_tool("trouver_garage", tool_inputs)
         tools_triggered.append("trouver_garage")
-        messages = [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": [{"type": "tool_use", "id": "forced_1", "name": "trouver_garage", "input": tool_inputs}]},
-            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "forced_1", "content": tool_result}]}
-        ]
         try:
-            response = await client.messages.create(
-                model=CLAUDE_MODEL, max_tokens=1024,
-                system=system_prompt, messages=messages
+            followup = f"Voici les garages disponibles:\n{tool_result}\n\nMessage original: {user_message}"
+            simple_model = genai.GenerativeModel(
+                model_name=GEMINI_MODEL,
+                system_instruction=system_prompt
             )
-            final_text = _clean("".join(b.text for b in response.content if b.type == "text"))
-            return final_text or _clean(tool_result), tools_triggered
+            response = await simple_model.generate_content_async(followup)
+            return _clean(response.text) or _clean(tool_result), tools_triggered
         except Exception as e:
-            print("Erreur Anthropic forced:", e)
+            print("Erreur Gemini forced:", e)
             return _clean(tool_result), tools_triggered
 
-    # ETAPE 4: Flux normal Claude avec outils
-    messages = [{"role": "user", "content": user_message}]
+    # ETAPE 4: Flux normal avec function calling
     try:
-        response = await client.messages.create(
-            model=CLAUDE_MODEL, max_tokens=1024,
-            system=system_prompt, tools=tools, messages=messages
-        )
-        while response.stop_reason == "tool_use":
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    tools_triggered.append(block.name)
-                    result = execute_tool(block.name, block.input)
-                    tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
-            messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results})
-            response = await client.messages.create(
-                model=CLAUDE_MODEL, max_tokens=1024,
-                system=system_prompt, tools=tools, messages=messages
-            )
-        final_text = _clean("".join(b.text for b in response.content if b.type == "text"))
-        return final_text or "Desole, pas de reponse.", tools_triggered
+        chat = model.start_chat()
+        response = await chat.send_message_async(user_message)
+
+        # Boucle function calling
+        max_iterations = 5
+        iteration = 0
+        while response.candidates and iteration < max_iterations:
+            iteration += 1
+            has_function_call = False
+            tool_results_parts = []
+
+            for part in response.parts:
+                if hasattr(part, "function_call") and part.function_call.name:
+                    has_function_call = True
+                    fn_name = part.function_call.name
+                    fn_args = dict(part.function_call.args)
+                    tools_triggered.append(fn_name)
+                    result = execute_tool(fn_name, fn_args)
+                    tool_results_parts.append(
+                        genai.protos.Part(
+                            function_response=genai.protos.FunctionResponse(
+                                name=fn_name,
+                                response={"result": result}
+                            )
+                        )
+                    )
+
+            if not has_function_call:
+                break
+
+            response = await chat.send_message_async(tool_results_parts)
+
+        # Extraire le texte final
+        final_text = ""
+        for part in response.parts:
+            if hasattr(part, "text") and part.text:
+                final_text += part.text
+
+        return _clean(final_text) or "Desole, pas de reponse.", tools_triggered
+
     except Exception as e:
-        print("Erreur Anthropic:", e)
+        print("Erreur Gemini:", e)
         return "Desole, j ai un petit souci technique. Reessaie dans un instant!", tools_triggered
